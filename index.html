@@ -174,6 +174,26 @@
             word-break: break-all;
             margin-bottom: 15px;
             border-left: 4px solid #4cc9f0;
+            position: relative;
+            padding-right: 50px;
+        }
+        
+        .url-copy-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #4cc9f0;
+            cursor: pointer;
+            background: rgba(76, 201, 240, 0.1);
+            padding: 8px;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+        }
+        
+        .url-copy-icon:hover {
+            background: rgba(76, 201, 240, 0.2);
+            transform: translateY(-50%) scale(1.1);
         }
         
         .copy-btn {
@@ -241,6 +261,29 @@
             margin-top: 5px;
         }
         
+        .copy-notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #06d6a0;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 1000;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+        
+        .copy-notification.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        
         footer {
             margin-top: 30px;
             text-align: center;
@@ -267,6 +310,12 @@
             .input-section {
                 grid-template-columns: 1fr;
             }
+            
+            .copy-notification {
+                left: 20px;
+                right: 20px;
+                text-align: center;
+            }
         }
         
         @media (max-width: 480px) {
@@ -276,6 +325,19 @@
             
             button {
                 padding: 10px 20px;
+            }
+            
+            .result-url {
+                padding-right: 15px;
+            }
+            
+            .url-copy-icon {
+                position: relative;
+                top: 0;
+                right: 0;
+                transform: none;
+                margin-top: 10px;
+                display: inline-block;
             }
         }
     </style>
@@ -326,8 +388,14 @@
         <div class="result-section" id="resultSection">
             <div class="result-title">
                 <i class="fas fa-link"></i> Generated Recording URL
+                <span style="margin-left: auto; font-size: 0.9rem; color: #a5b4cb;" id="autoCopyStatus"></span>
             </div>
-            <div class="result-url" id="resultUrl"></div>
+            <div class="result-url" id="resultUrl">
+                <span id="urlText"></span>
+                <div class="url-copy-icon" id="inlineCopyBtn" title="Copy URL">
+                    <i class="far fa-copy"></i>
+                </div>
+            </div>
             <div class="button-group">
                 <button class="copy-btn" id="copyBtn"><i class="far fa-copy"></i> Copy URL to Clipboard</button>
                 <button class="download-btn" id="downloadBtn"><i class="fas fa-download"></i> Download Recording MP3</button>
@@ -339,6 +407,11 @@
                 <div class="progress-text" id="progressText">Preparing download...</div>
             </div>
         </div>
+    </div>
+    
+    <div class="copy-notification" id="copyNotification">
+        <i class="fas fa-check-circle"></i>
+        <span>URL copied to clipboard!</span>
     </div>
     
     <footer>
@@ -356,17 +429,22 @@
         const resetBtn = document.getElementById('resetBtn');
         const resultSection = document.getElementById('resultSection');
         const resultUrl = document.getElementById('resultUrl');
+        const urlText = document.getElementById('urlText');
         const copyBtn = document.getElementById('copyBtn');
+        const inlineCopyBtn = document.getElementById('inlineCopyBtn');
         const downloadBtn = document.getElementById('downloadBtn');
         const downloadProgress = document.getElementById('downloadProgress');
         const progressFill = document.getElementById('progressFill');
         const progressText = document.getElementById('progressText');
+        const copyNotification = document.getElementById('copyNotification');
+        const autoCopyStatus = document.getElementById('autoCopyStatus');
         
         // Variables for timer
         let countdown;
         let timeLeft;
         let isRunning = false;
         let generatedUrl = '';
+        let autoCopyEnabled = true;
         
         // Initialize with default time
         updateDisplay(parseInt(countdownTimeInput.value));
@@ -375,6 +453,7 @@
         startBtn.addEventListener('click', startCountdown);
         resetBtn.addEventListener('click', resetCountdown);
         copyBtn.addEventListener('click', copyUrlToClipboard);
+        inlineCopyBtn.addEventListener('click', copyUrlToClipboard);
         downloadBtn.addEventListener('click', downloadRecording);
         
         // Update display when countdown time changes
@@ -474,6 +553,9 @@
             
             // Hide result section
             resultSection.style.display = 'none';
+            
+            // Reset auto-copy status
+            autoCopyStatus.textContent = '';
         }
         
         // Update timer display
@@ -524,41 +606,112 @@
             generatedUrl = `http://${server}/RECORDINGS/MP3/${rec}${phoneNumber}-all.mp3`;
             
             // Display the result
-            resultUrl.textContent = generatedUrl;
+            urlText.textContent = generatedUrl;
             resultSection.style.display = 'block';
             
             // Scroll to result
             resultSection.scrollIntoView({ behavior: 'smooth' });
             
+            // Auto-copy URL to clipboard
+            if (autoCopyEnabled) {
+                copyUrlToClipboard();
+                autoCopyStatus.textContent = '(Auto-copied to clipboard)';
+                autoCopyStatus.style.color = '#06d6a0';
+                
+                // Reset status after 5 seconds
+                setTimeout(() => {
+                    autoCopyStatus.textContent = '';
+                }, 5000);
+            }
+            
             // Play completion sound
             playCompletionSound();
         }
         
-        // Copy URL to clipboard
+        // Copy URL to clipboard with enhanced feedback
         function copyUrlToClipboard() {
-            const url = resultUrl.textContent;
+            const url = urlText.textContent;
+            
+            if (!url || url.trim() === '') {
+                showNotification('No URL generated yet!', 'error');
+                return;
+            }
             
             navigator.clipboard.writeText(url).then(() => {
-                // Show feedback
-                const originalText = copyBtn.innerHTML;
+                // Show success notification
+                showNotification('URL copied to clipboard!', 'success');
+                
+                // Visual feedback on buttons
                 copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
                 copyBtn.style.backgroundColor = '#06d6a0';
                 
+                inlineCopyBtn.innerHTML = '<i class="fas fa-check"></i>';
+                inlineCopyBtn.style.color = '#06d6a0';
+                
+                // Reset buttons after 2 seconds
                 setTimeout(() => {
-                    copyBtn.innerHTML = originalText;
+                    copyBtn.innerHTML = '<i class="far fa-copy"></i> Copy URL to Clipboard';
                     copyBtn.style.backgroundColor = '#4361ee';
+                    
+                    inlineCopyBtn.innerHTML = '<i class="far fa-copy"></i>';
+                    inlineCopyBtn.style.color = '#4cc9f0';
                 }, 2000);
+                
             }).catch(err => {
                 console.error('Failed to copy: ', err);
-                alert('Failed to copy URL to clipboard');
+                showNotification('Failed to copy URL to clipboard', 'error');
+                
+                // Fallback method for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = url;
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                try {
+                    const successful = document.execCommand('copy');
+                    if (successful) {
+                        showNotification('URL copied to clipboard!', 'success');
+                    } else {
+                        showNotification('Failed to copy URL', 'error');
+                    }
+                } catch (err) {
+                    console.error('Fallback copy failed:', err);
+                    showNotification('Copy failed. Please select and copy manually.', 'error');
+                }
+                
+                document.body.removeChild(textArea);
             });
+        }
+        
+        // Show notification
+        function showNotification(message, type) {
+            const notification = copyNotification;
+            const icon = notification.querySelector('i');
+            const text = notification.querySelector('span');
+            
+            text.textContent = message;
+            
+            if (type === 'success') {
+                notification.style.backgroundColor = '#06d6a0';
+                icon.className = 'fas fa-check-circle';
+            } else {
+                notification.style.backgroundColor = '#f72585';
+                icon.className = 'fas fa-exclamation-circle';
+            }
+            
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
         }
         
         // Download recording MP3
         async function downloadRecording() {
-            const url = resultUrl.textContent;
-            if (!url) {
-                alert('No URL generated yet. Please complete the countdown first.');
+            const url = urlText.textContent;
+            if (!url || url.trim() === '') {
+                showNotification('No URL generated yet. Please complete the countdown first.', 'error');
                 return;
             }
             
@@ -662,50 +815,8 @@
                     progressFill.style.width = '0%';
                 }, 3000);
                 
-                alert(`Failed to download recording: ${error.message}\n\nMake sure the server is accessible and the URL is correct.`);
+                showNotification(`Failed to download: ${error.message}`, 'error');
             }
-        }
-        
-        // Alternative download method for servers without CORS
-        function downloadRecordingAlternative() {
-            const url = resultUrl.textContent;
-            if (!url) {
-                alert('No URL generated yet. Please complete the countdown first.');
-                return;
-            }
-            
-            // Create filename from the URL
-            const filename = url.split('/').pop() || 'recording.mp3';
-            
-            // Create download link directly
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
-            link.target = '_blank';
-            
-            // Show simple progress
-            downloadProgress.style.display = 'block';
-            progressFill.style.width = '50%';
-            progressText.textContent = 'Opening download...';
-            
-            // Trigger download
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            
-            // Show completion
-            setTimeout(() => {
-                progressFill.style.width = '100%';
-                progressText.textContent = 'Download started in browser!';
-                progressFill.style.backgroundColor = '#06d6a0';
-                
-                // Reset after delay
-                setTimeout(() => {
-                    downloadProgress.style.display = 'none';
-                    progressFill.style.backgroundColor = '#4cc9f0';
-                    progressFill.style.width = '0%';
-                }, 2000);
-            }, 1000);
         }
         
         // Play completion sound
@@ -739,9 +850,17 @@
             phoneNumberInput.value = "1234567890";
             serverInput.value = "example.com";
             
-            // Use alternative download if CORS might be an issue
-            // Uncomment the line below to use the simple download method
-            // downloadBtn.addEventListener('click', downloadRecordingAlternative);
+            // Toggle auto-copy on click
+            autoCopyStatus.addEventListener('click', () => {
+                autoCopyEnabled = !autoCopyEnabled;
+                if (autoCopyEnabled) {
+                    autoCopyStatus.textContent = '(Auto-copy: ON)';
+                    autoCopyStatus.style.color = '#06d6a0';
+                } else {
+                    autoCopyStatus.textContent = '(Auto-copy: OFF)';
+                    autoCopyStatus.style.color = '#a5b4cb';
+                }
+            });
         });
     </script>
 </body>
